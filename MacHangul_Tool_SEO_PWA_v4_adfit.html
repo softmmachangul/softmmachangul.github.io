@@ -1,0 +1,304 @@
+
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>맥 한글 변환 도구 · Mac Hangul Conversion Tool</title>
+<meta name="description" content="맥(NFD)에서 온 한글을 NFC로 안전 변환. URL/Latin1 깨짐 자동 보정, 클립보드 복사, 코드포인트 인스펙터, 드래그&드롭/파일 선택, PWA 오프라인 지원.">
+<link rel="canonical" href="https://example.com/mac-hangul-conversion-tool">
+<meta name="robots" content="index,follow">
+<meta name="theme-color" content="#0c0f18">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="favicon.ico">
+
+<!-- Open Graph / Twitter trimmed for brevity -->
+
+<style>
+  :root{
+    --bg:#0c0f18; --fg:#e9edf6; --muted:#a2abc2; --card:#12172a; --line:#1e2744; --accent:#5fb3ff;
+    --btn:#22335c; --btnb:#2c4173; --btnh:#2b3f70;
+  }
+  :root.light{ --bg:#ffffff; --fg:#111827; --muted:#6b7280; --card:#f8fafc; --line:#e5e7eb; --accent:#2563eb;
+               --btn:#e5e7eb; --btnb:#d1d5db; --btnh:#dbeafe; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Apple SD Gothic Neo,Noto Sans KR,sans-serif;line-height:1.55}
+  header{padding:18px 14px;border-bottom:1px solid var(--line)}
+  header .row{display:flex;gap:12px;align-items:center;justify-content:space-between;max-width:1120px;margin:0 auto}
+  header h1{margin:0;font-size:18px}
+  header .controls{display:flex;gap:8px;flex-wrap:wrap}
+  .pill{display:inline-block;background:#1b2547;border:1px solid #2b3c6f;color:#bcd3ff;border-radius:999px;padding:3px 8px;font-size:12px}
+  .pill.light{background:#eef2ff;border-color:#dbeafe;color:#1e40af}
+  main{max-width:1120px;margin:0 auto;padding:14px 18px 18px;display:grid;gap:14px}
+  .grid{display:grid;grid-template-columns:1fr;gap:16px}
+  @media(min-width:1000px){ .grid{grid-template-columns:1fr 1fr} }
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px}
+  .card h2{margin:0 0 8px 0;font-size:16px;color:var(--muted);font-weight:600}
+  textarea,.mono{width:100%;min-height:220px;background:color-mix(in srgb, var(--bg) 92%, black 8%);border:1px solid var(--line);border-radius:12px;color:var(--fg);
+                 padding:12px;font-size:15px;resize:vertical;line-height:1.6}
+  .mono{white-space:pre-wrap;overflow:auto}
+  .bar{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  button{background:var(--btn);border:1px solid var(--btnb);color:var(--fg);border-radius:12px;padding:10px 14px;cursor:pointer;font-size:15px}
+  button:hover{background:var(--btnh)}
+  .accent{background:var(--accent);border-color:var(--accent);color:#fff}
+  .hint{font-size:12.5px;color:var(--muted);margin-top:8px}
+  .badge{display:inline-block;border-radius:8px;padding:2px 8px;font-size:12px;border:1px solid var(--line);background:color-mix(in srgb, var(--bg) 96%, black 4%)}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .kv{display:grid;grid-template-columns:max-content 1fr;gap:8px 14px;font-size:13px}
+  .kv div:nth-child(odd){color:var(--muted)}
+  .drop{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+        border:2px dashed var(--line);border-radius:12px;padding:14px;text-align:center;color:var(--muted);margin-top:10px}
+  .drop.hover{background:color-mix(in srgb, var(--bg) 92%, black 8%)}
+  .select{padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--fg)}
+  @media(max-width:640px){
+    button{width:100%;padding:14px 16px;font-size:16px;border-radius:14px}
+    .two{grid-template-columns:1fr}
+  }
+  /* Ad slots: reserve heights to prevent CLS */
+  .ad-slot{display:flex;align-items:center;justify-content:center;background:color-mix(in srgb, var(--bg) 96%, black 4%);border:1px dashed var(--line);
+           border-radius:12px; overflow:hidden}
+  .ad-top{min-height:90px}
+  .ad-mid{min-height:250px}
+  .ad-bottom{min-height:90px}
+</style>
+</head>
+<body>
+  <header>
+    <div class="row">
+      <h1 id="site-title">맥 한글 변환 도구 <span class="pill" id="site-sub">Safe · Pro</span></h1>
+      <div class="controls">
+        <div class="toggle">
+          <label for="lang">🌐</label>
+          <select id="lang" class="select" aria-label="Language">
+            <option value="ko" selected>한국어</option>
+            <option value="en">English</option>
+          </select>
+        </div>
+        <button id="theme-toggle" aria-label="Toggle theme">🌙 Dark</button>
+        <button id="install" aria-label="Install PWA" style="display:none">⤓ 설치</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- AdFit: Top banner (just under header) -->
+  <div class="ad-slot ad-top" id="adfit-top">
+    <!-- Kakao AdFit Slot (Top) -->
+    <ins class="kakao_ad_area" style="display:none;"
+         data-ad-unit="DAN-REPLACE_WITH_YOUR_TOP_UNIT"
+         data-ad-width="728" data-ad-height="90"></ins>
+  </div>
+
+  <main>
+    <section class="grid">
+      <div class="card">
+        <h2 data-i18n="input_title">입력</h2>
+        <textarea id="input" placeholder="여기에 맥에서 복사한 텍스트(NFD/깨짐 포함)를 붙여넣으세요."></textarea>
+        <div class="bar">
+          <button id="btn-paste" data-i18n="paste">붙여넣기</button>
+          <button id="btn-clear" data-i18n="clear">지우기</button>
+          <button id="btn-swap" data-i18n="swap">입력 ↔ 출력 교환</button>
+        </div>
+        <div id="dropzone" class="drop" aria-label="파일 드래그&드롭 영역">
+          <div data-i18n="drop">여기로 .txt 파일을 드래그&드롭하거나 선택</div>
+          <div><button id="btn-file" class="accent" data-i18n="choose_file">📁 파일 선택</button></div>
+          <input id="file" type="file" accept=".txt" hidden>
+        </div>
+        <div class="hint" data-i18n="auto_hint">변경 시 우측 결과가 자동으로 갱신됩니다.</div>
+      </div>
+
+      <div class="card">
+        <h2 data-i18n="output_title">결과</h2>
+        <div class="two">
+          <div>
+            <div class="badge" data-i18n="display_mode">표시용</div>
+            <div id="output" class="mono" aria-label="변환 결과"></div>
+            <div class="bar">
+              <button class="accent" id="btn-copy" data-i18n="copy_result">📋 결과 복사</button>
+              <button id="btn-select" data-i18n="select_all">전체 선택</button>
+              <button id="btn-download" data-i18n="download_txt">.txt 다운로드</button>
+            </div>
+          </div>
+          <div>
+            <div class="badge" data-i18n="copy_variant">선택 변환 복사</div>
+            <div class="bar">
+              <button id="btn-copy-nfc" data-i18n="copy_nfc">NFC로 복사</button>
+              <button id="btn-copy-nfd" data-i18n="copy_nfd">NFD로 복사</button>
+              <button id="btn-copy-raw" data-i18n="copy_raw">원본 그대로 복사</button>
+            </div>
+            <div class="hint" data-i18n="copy_hint">※ 화면 표시와 별개로, 원하는 정규화 형태로 직접 복사할 수 있습니다.</div>
+          </div>
+        </div>
+        <div class="hint" id="why">경로: -</div>
+      </div>
+    </section>
+
+    <!-- AdFit: Middle rectangle between sections -->
+    <div class="ad-slot ad-mid" id="adfit-mid" style="margin:6px 0;">
+      <!-- Kakao AdFit Slot (Middle) -->
+      <ins class="kakao_ad_area" style="display:none;"
+           data-ad-unit="DAN-REPLACE_WITH_YOUR_MID_UNIT"
+           data-ad-width="300" data-ad-height="250"></ins>
+    </div>
+
+    <section class="card">
+      <h2 data-i18n="inspector_title">코드포인트 인스펙터</h2>
+      <div class="two">
+        <div>
+          <div class="badge" data-i18n="original">원본</div>
+          <div id="ins-src" class="mono" style="min-height:140px"></div>
+        </div>
+        <div>
+          <div class="badge" data-i18n="result">결과</div>
+          <div id="ins-out" class="mono" style="min-height:140px"></div>
+        </div>
+      </div>
+      <div class="hint" data-i18n="inspector_hint">각 문자에 대해 U+코드와 한글 여부를 표시합니다.</div>
+    </section>
+
+    <div class="hint" data-i18n="privacy_note">※ 모든 처리는 브라우저 내에서만 수행됩니다. (네트워크 전송 없음)</div>
+  </main>
+
+  <!-- AdFit: Bottom banner (above footer area) -->
+  <div class="ad-slot ad-bottom" id="adfit-bottom" style="max-width:1120px;margin:0 auto 18px;">
+    <!-- Kakao AdFit Slot (Bottom) -->
+    <ins class="kakao_ad_area" style="display:none;"
+         data-ad-unit="DAN-REPLACE_WITH_YOUR_BOTTOM_UNIT"
+         data-ad-width="728" data-ad-height="90"></ins>
+  </div>
+
+<script>
+// Theme toggle
+const root = document.documentElement;
+const themeBtn = document.getElementById('theme-toggle');
+function applyTheme(mode){
+  if(mode==='light'){ root.classList.add('light'); themeBtn.textContent='🌚 Light'; }
+  else { root.classList.remove('light'); themeBtn.textContent='🌙 Dark'; }
+  localStorage.setItem('theme', mode);
+}
+const savedTheme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+applyTheme(savedTheme);
+themeBtn.addEventListener('click', ()=> applyTheme(root.classList.contains('light') ? 'dark' : 'light'));
+
+// i18n
+const i18n = {
+  ko: { site_title:'맥 한글 변환 도구', sub:'Safe · Pro',
+    input_title:'입력', paste:'붙여넣기', clear:'지우기', swap:'입력 ↔ 출력 교환',
+    drop:'여기로 .txt 파일을 드래그&드롭하거나 선택', choose_file:'📁 파일 선택', auto_hint:'변경 시 우측 결과가 자동으로 갱신됩니다.',
+    output_title:'결과', display_mode:'표시용', copy_result:'📋 결과 복사', select_all:'전체 선택', download_txt:'.txt 다운로드',
+    copy_variant:'선택 변환 복사', copy_nfc:'NFC로 복사', copy_nfd:'NFD로 복사', copy_raw:'원본 그대로 복사', copy_hint:'※ 화면 표시와 별개로, 원하는 정규화 형태로 직접 복사할 수 있습니다.',
+    mode_title:'모드 및 옵션', safe_mode:'안전 모드(자동 판단)', manual_fix:'수동 보정', try_all:'모든 방식 점수 비교', show_original:'원본 표시',
+    inspector_title:'코드포인트 인스펙터', original:'원본', result:'결과', inspector_hint:'각 문자에 대해 U+코드와 한글 여부를 표시합니다.',
+    privacy_note:'※ 모든 처리는 브라우저 내에서만 수행됩니다. (네트워크 전송 없음)',
+    reason_prefix:'경로: ', meta_title:'맥 한글 변환 도구 · Mac Hangul Conversion Tool',
+    meta_desc:'맥(NFD)에서 온 한글을 NFC로 안전 변환. URL/Latin1 깨짐 자동 보정, 클립보드 복사, 코드포인트 인스펙터, 드래그&드롭/파일 선택, PWA 오프라인 지원.'
+  },
+  en: { site_title:'Mac Hangul Conversion Tool', sub:'Safe · Pro',
+    input_title:'Input', paste:'Paste', clear:'Clear', swap:'Swap In/Out',
+    drop:'Drag & drop a .txt file here or choose', choose_file:'📁 Choose File', auto_hint:'The result updates automatically when the input changes.',
+    output_title:'Output', display_mode:'Display', copy_result:'📋 Copy Result', select_all:'Select All', download_txt:'Download .txt',
+    copy_variant:'Copy with normalization', copy_nfc:'Copy as NFC', copy_nfd:'Copy as NFD', copy_raw:'Copy Raw', copy_hint:'Copy in your desired normalization independent from the display.',
+    mode_title:'Mode & Options', safe_mode:'Safe mode (auto)', manual_fix:'Manual fix', try_all:'Compare all methods', show_original:'Show Original',
+    inspector_title:'Codepoint Inspector', original:'Original', result:'Result', inspector_hint:'Displays U+code and Hangul flag for each character.',
+    privacy_note:'All processing is done locally in your browser. No network transfer.',
+    reason_prefix:'Path: ', meta_title:'Mac Hangul Conversion Tool · 맥 한글 변환 도구',
+    meta_desc:'Safely convert Mac (NFD) Hangul to NFC. Auto-fix URL/Latin1 mojibake, clipboard copy, codepoint inspector, drag & drop / file choose, PWA offline.'
+  }
+};
+const langSel = document.getElementById('lang');
+function applyLang(lang){
+  const dict = i18n[lang] || i18n.ko;
+  document.getElementById('site-title').innerHTML = dict.site_title + ' <span class="pill">'+dict.sub+'</span>';
+  document.title = dict.meta_title;
+  document.querySelector('meta[name="description"]').setAttribute('content', dict.meta_desc);
+  document.documentElement.setAttribute('lang', lang);
+  document.querySelectorAll('[data-i18n]').forEach(el => { const k=el.getAttribute('data-i18n'); if(dict[k]) el.textContent=dict[k]; });
+  localStorage.setItem('lang', lang);
+}
+applyLang(localStorage.getItem('lang') || 'ko');
+langSel.value = localStorage.getItem('lang') || 'ko';
+langSel.addEventListener('change', e => applyLang(e.target.value));
+
+// Conversion logic (safe + manual preserved from earlier versions)
+const $id = id => document.getElementById(id);
+const outputEl = $id('output');
+const whyEl = $id('why');
+const insSrcEl = $id('ins-src');
+const insOutEl = $id('ins-out');
+const statsEl = $id('stats');
+
+const NFD_JAMO = /[\u1100-\u11FF\u3130-\u318F]/;
+const HANGUL_SYL = /[\uAC00-\uD7A3]/;
+const MOJIBAKE_SEQ = /Ã|Â|¤|�/;
+const PERCENT_ENC = /%[0-9A-Fa-f]{2}/;
+
+function looksPureNFD(s){ return NFD_JAMO.test(s) && !HANGUL_SYL.test(s); }
+function looksMojibakeLatin1(s){ return MOJIBAKE_SEQ.test(s); }
+function looksPercentEncoded(s){ return PERCENT_ENC.test(s); }
+function urlDecode(str){ try{ return decodeURIComponent(str.replace(/\+/g,'%20')); }catch(e){ return str.replace(/%[0-9A-Fa-f]{2}/g, m=>{ try{return decodeURIComponent(m);}catch{ return m; } }); } }
+function toLatin1Bytes(str){ const bytes = new Uint8Array(str.length); for(let i=0;i<str.length;i++) bytes[i]=str.charCodeAt(i)&0xFF; return bytes; }
+function latin1ToUtf8(str){ try{ return new TextDecoder('utf-8',{fatal:false}).decode(toLatin1Bytes(str)); }catch(e){ return str; } }
+function pipeline(src, opts){ let out=src; if(opts?.url) out=urlDecode(out); if(opts?.latin1) out=latin1ToUtf8(out); if(opts?.manual) out=out; if(opts?.nfc) out=out.normalize('NFC'); return out; }
+function hangulCount(s){ const m=s.match(/[\u1100-\u11FF\u3130-\u318F\uAC00-\uD7A3]/g); return m?m.length:0; }
+function codepointInfo(s){ const arr=[]; for(const ch of s){ const cp=ch.codePointAt(0).toString(16).toUpperCase().padStart(4,'0'); const isH=/[\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F]/.test(ch); arr.push(`${ch==='\n'?'⏎':ch}  —  U+${cp}${isH?' (Hangul)':''}`);} return arr.join('\n'); }
+
+const modeSafe=$id('mode-safe'), optNFC=$id('opt-nfc'), optURL=$id('opt-url'), optLAT=$id('opt-latin1'), optMAN=$id('opt-manual'), inputEl=$id('input');
+function render(){
+  const src=inputEl.value; let out, reason; const lang=localStorage.getItem('lang')||'ko'; const prefix=i18n[lang].reason_prefix;
+  if(modeSafe?.checked){
+    if(looksPureNFD(src)){ out=src.normalize('NFC'); reason='NFD→NFC'; }
+    else if(looksPercentEncoded(src)){ out=urlDecode(src).normalize('NFC'); reason='URL→NFC'; }
+    else if(looksMojibakeLatin1(src)){ out=latin1ToUtf8(src).normalize('NFC'); reason='Latin1→UTF-8→NFC'; }
+    else { out=(()=>{ try{return src.normalize('NFC');}catch{return src;} })(); reason='NFC only'; }
+    whyEl.textContent = prefix + reason + ' (Safe)';
+  }else{
+    const opts={nfc:optNFC?.checked,url:optURL?.checked,latin1:optLAT?.checked,manual:optMAN?.checked}; out=pipeline(src,opts);
+    whyEl.textContent = prefix + 'Manual pipeline';
+  }
+  outputEl.textContent = out;
+  statsEl.innerHTML = `<div>입력 길이</div><div>${src.length}</div><div>입력 한글 수</div><div>${hangulCount(src)}</div><div>출력 길이</div><div>${out.length}</div><div>출력 한글 수</div><div>${hangulCount(out)}</div>`;
+  insSrcEl.textContent = codepointInfo(src); insOutEl.textContent = codepointInfo(out);
+}
+document.getElementById('btn-paste').addEventListener('click', async () => { try{ const t=await navigator.clipboard.readText(); inputEl.value=t; render(); }catch{ alert('클립보드 접근이 차단되었습니다.'); } });
+document.getElementById('btn-clear').addEventListener('click', ()=>{ inputEl.value=''; render(); });
+document.getElementById('btn-swap').addEventListener('click', ()=>{ const tmp=inputEl.value; inputEl.value=outputEl.textContent||''; outputEl.textContent=tmp; render(); });
+document.getElementById('btn-copy').addEventListener('click', async ()=>{ const t=outputEl.textContent||''; if(!t.trim()) return alert('복사할 결과가 없습니다.'); try{ await navigator.clipboard.writeText(t); alert('✅'); }catch{ alert('❌'); } });
+document.getElementById('btn-select').addEventListener('click', ()=>{ const sel=window.getSelection(); const range=document.createRange(); range.selectNodeContents(outputEl); sel.removeAllRanges(); sel.addRange(range); });
+document.getElementById('btn-download').addEventListener('click', ()=>{ const blob=new Blob([outputEl.textContent||''],{type:'text/plain;charset=utf-8'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='converted_ko.txt'; a.click(); URL.revokeObjectURL(url); });
+
+// Robust File Select & Drag&Drop
+const fileInput=document.getElementById('file'); const btnFile=document.getElementById('btn-file'); const dropzone=document.getElementById('dropzone');
+btnFile.addEventListener('click', ()=> fileInput.click());
+dropzone.addEventListener('click', (e)=>{ if(e.target!==btnFile) fileInput.click(); });
+fileInput.addEventListener('change', async (e)=>{ const f=e.target.files&&e.target.files[0]; if(!f) return; const txt=await f.text(); inputEl.value=txt; render(); fileInput.value=''; });
+['dragenter','dragover'].forEach(ev => { dropzone.addEventListener(ev, e=>{ e.preventDefault(); e.stopPropagation(); dropzone.classList.add('hover'); }); window.addEventListener(ev, e=> e.preventDefault()); });
+['dragleave','drop'].forEach(ev => { dropzone.addEventListener(ev, e=>{ e.preventDefault(); e.stopPropagation(); dropzone.classList.remove('hover'); }); });
+window.addEventListener('drop', e => { e.preventDefault(); const dt=e.dataTransfer; const f=dt&&dt.files&&dt.files[0]; if(!f) return; f.text().then(txt=>{ inputEl.value=txt; render(); }); });
+
+// PWA install
+let deferredPrompt; window.addEventListener('beforeinstallprompt', (e)=>{ e.preventDefault(); deferredPrompt=e; document.getElementById('install').style.display='inline-block'; });
+document.getElementById('install').addEventListener('click', async ()=>{ if(!deferredPrompt) return; deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt=null; document.getElementById('install').style.display='none'; });
+if('serviceWorker' in navigator){ window.addEventListener('load', ()=> navigator.serviceWorker.register('service-worker.js')); }
+
+// Lazy-load AdFit script when any ad slot enters viewport
+let adfitLoaded=false;
+function loadAdfit(){
+  if(adfitLoaded) return;
+  adfitLoaded=true;
+  const s=document.createElement('script');
+  s.async=true; s.type='text/javascript'; s.src='//t1.daumcdn.net/kas/static/ba.min.js';
+  document.body.appendChild(s);
+}
+const adSlots=[document.getElementById('adfit-top'), document.getElementById('adfit-mid'), document.getElementById('adfit-bottom')].filter(Boolean);
+if('IntersectionObserver' in window && adSlots.length){
+  const io=new IntersectionObserver((entries)=>{ if(entries.some(e=>e.isIntersecting)) { loadAdfit(); io.disconnect(); } }, {root:null,rootMargin:'0px',threshold:0.01});
+  adSlots.forEach(el=>io.observe(el));
+}else{
+  // Fallback: load after idle
+  setTimeout(loadAdfit, 1500);
+}
+
+// First render
+render();
+</script>
+</body>
+</html>
