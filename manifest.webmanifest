@@ -1,0 +1,14 @@
+{
+  "name": "맥 한글 변환 도구",
+  "short_name": "HangulTool",
+  "description": "맥(NFD)에서 온 한글을 NFC로 안전 변환하는 온라인 도구",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0c0f18",
+  "theme_color": "#0c0f18",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>맥 한글 변환기 (Mac ↔ Windows)</title>
+<style>
+  body {
+    font-family: 'Pretendard', sans-serif;
+    max-width: 700px;
+    margin: 40px auto;
+    padding: 20px;
+    background: #fafafa;
+    color: #333;
+  }
+  h1 { text-align: center; }
+  textarea {
+    width: 100%;
+    height: 120px;
+    margin-top: 10px;
+    padding: 10px;
+    font-size: 16px;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+    resize: vertical;
+  }
+  button {
+    margin-top: 10px;
+    padding: 10px 16px;
+    font-size: 15px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    background: #007aff;
+    color: #fff;
+    transition: background 0.2s;
+  }
+  button:hover { background: #005fc1; }
+  #output {
+    background: #f4f4f4;
+    padding: 12px;
+    border-radius: 8px;
+    min-height: 100px;
+    white-space: pre-wrap;
+    margin-top: 10px;
+    border: 1px solid #ddd;
+    font-size: 16px;
+  }
+</style>
+</head>
+<body>
+
+<h1>💡 맥 한글 변환기</h1>
+<p>맥에서 복사한 깨진 한글을 붙여넣으면, 자동으로 정상 변환합니다.</p>
+
+<label>입력 텍스트:</label>
+<textarea id="inputText" placeholder="예: 맥에서 깨진 한글을 붙여넣으세요."></textarea>
+
+<button onclick="convertText()">변환하기</button>
+
+<h3>결과:</h3>
+<div id="output"></div>
+
+<button onclick="copyToClipboard()">📋 복사하기</button>
+
+<script>
+  // 간단한 맥 ↔ 윈도우 한글 깨짐 보정용 테이블 (일부 예시)
+  const macWinTable = {
+    'Ã«': '한', 'Ã¬': '이', 'Ã¬Â': '가', 'Ã¬Æ': '의', 'Ã¬â': '을', 
+    'Ãª': '에', 'Ã­': '다', 'Ã­Â': '도', 'Ã«Â': '는', 'Ã­â': '로',
+    'Ã«ï': '음', 'Ã«œ': '중', 'Ã«¬': '하', 'Ã«°': '안', 'Ã«³': '요',
+  };
+
+  function macToKorean(text) {
+    let converted = text;
+    for (const key in macWinTable) {
+      const re = new RegExp(key, 'g');
+      converted = converted.replace(re, macWinTable[key]);
+    }
+    return converted;
+  }
+
+  function convertText() {
+    const input = document.getElementById('inputText').value;
+    const output = macToKorean(input);
+    document.getElementById('output').textContent = output;
+  }
+
+  function copyToClipboard() {
+    const outputText = document.getElementById('output').textContent;
+    if (!outputText) {
+      alert("변환된 텍스트가 없습니다!");
+      return;
+    }
+    navigator.clipboard.writeText(outputText)
+      .then(() => alert("복사 완료 ✅"))
+      .catch(() => alert("복사 실패 ❌"));
+  }
+</script>
+
+</body>
+</html>

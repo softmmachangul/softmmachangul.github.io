@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mac Hangul Online Tool — Safe Heuristics</title>
+<style>
+  :root{ --bg:#0c0f18; --fg:#e9edf6; --muted:#a2abc2; --card:#12172a; --line:#1e2744; --accent:#5fb3ff; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Apple SD Gothic Neo,Noto Sans KR,sans-serif;line-height:1.55}
+  header{padding:22px 14px;text-align:center;border-bottom:1px solid var(--line)}
+  header h1{margin:0;font-size:22px}
+  header .sub{color:var(--muted);font-size:13px;margin-top:6px}
+  main{max-width:1100px;margin:0 auto;padding:18px;display:grid;gap:16px}
+  .grid{display:grid;grid-template-columns:1fr;gap:16px}
+  @media(min-width:980px){ .grid{grid-template-columns:1fr 1fr} }
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px}
+  .card h2{margin:0 0 8px 0;font-size:16px;color:var(--muted);font-weight:600}
+  textarea,.mono{width:100%;min-height:220px;background:#0c1224;border:1px solid #2a355a;border-radius:12px;color:#e9edf6;
+                 padding:12px;font-size:15px;resize:vertical;line-height:1.6}
+  .mono{white-space:pre-wrap;overflow:auto}
+  .bar{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  button{background:#22335c;border:1px solid #2c4173;color:#e6ecff;border-radius:10px;padding:8px 12px;cursor:pointer;font-size:14px}
+  button:hover{background:#2b3f70}
+  .accent{background:var(--accent);border-color:var(--accent);color:#0b1020}
+  .switch{display:inline-flex;align-items:center;gap:6px;margin-right:10px}
+  .switch input{accent-color:var(--accent)}
+  .hint{font-size:12.5px;color:var(--muted);margin-top:8px}
+  .pill{display:inline-block;background:#1b2547;border:1px solid #2b3c6f;color:#bcd3ff;border-radius:999px;padding:3px 8px;margin-left:6px;font-size:12px}
+  .kv{display:grid;grid-template-columns:max-content 1fr;gap:8px 14px;font-size:13px}
+  .kv div:nth-child(odd){color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Mac Hangul Online Tool <span class="pill">Safe</span> <span class="pill">NFC/NFD</span> <span class="pill">Clipboard</span></h1>
+  <div class="sub">순수 NFD 한글은 NFC만 적용 · 의심 케이스에만 URL/Latin1 보정</div>
+</header>
+
+<main>
+  <section class="grid">
+    <div class="card">
+      <h2>입력</h2>
+      <textarea id="input" placeholder="여기에 NFD 한글 또는 깨진 텍스트를 붙여넣으세요."></textarea>
+      <div class="bar">
+        <button id="btn-paste">붙여넣기</button>
+        <button id="btn-clear">지우기</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>결과</h2>
+      <div id="output" class="mono" aria-label="변환 결과"></div>
+      <div class="bar">
+        <button class="accent" id="btn-copy">📋 결과 복사</button>
+        <button id="btn-select">전체 선택</button>
+      </div>
+      <div class="hint" id="why"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>상태</h2>
+    <div class="kv" id="stats"></div>
+    <div class="hint">※ 모든 처리는 로컬에서만 수행됩니다.</div>
+  </section>
+</main>
+
+<script>
+const NFD_JAMO = /[\\u1100-\\u11FF\\u3130-\\u318F]/;
+const HANGUL_SYL = /[\\uAC00-\\uD7A3]/;
+const MOJIBAKE_SEQ = /Ã|Â|¤|�/;
+const PERCENT_ENC = /%[0-9A-Fa-f]{2}/;
+
+function looksPureNFD(s){ return NFD_JAMO.test(s) && !HANGUL_SYL.test(s); }
+function looksMojibakeLatin1(s){ return MOJIBAKE_SEQ.test(s); }
+function looksPercentEncoded(s){ return PERCENT_ENC.test(s); }
+
+function urlDecode(str){
+  try{ return decodeURIComponent(str.replace(/\\+/g,'%20')); }
+  catch(e){ return str.replace(/%[0-9A-Fa-f]{2}/g, m=>{ try{return decodeURIComponent(m);}catch{ return m; } }); }
+}
+function latin1ToUtf8(str){
+  try{
+    const bytes = new Uint8Array(str.length);
+    for(let i=0;i<str.length;i++){ bytes[i] = str.charCodeAt(i) & 0xFF; }
+    return new TextDecoder('utf-8',{fatal:false}).decode(bytes);
+  }catch(e){ return str; }
+}
+
+function safeConvert(src){
+  let reason = '';
+  let out = src;
+  if(looksPureNFD(src)){
+    out = src.normalize('NFC');
+    reason = '순수 NFD 한글 → NFC만 적용';
+  }else if(looksPercentEncoded(src)){
+    out = urlDecode(src); try{ out = out.normalize('NFC'); }catch{}
+    reason = 'URL 인코딩 패턴 감지 → URL 디코딩 후 NFC';
+  }else if(looksMojibakeLatin1(src)){
+    out = latin1ToUtf8(src); try{ out = out.normalize('NFC'); }catch{}
+    reason = '라틴1/CP1252 패턴 감지 → Latin1→UTF-8 후 NFC';
+  }else{
+    try{ out = src.normalize('NFC'); reason = '일반 텍스트 → NFC만 적용'; }
+    catch{ reason = '정규화 불가 → 원본 유지'; }
+  }
+  return {out, reason};
+}
+
+const $ = s => document.querySelector(s);
+const inputEl = $('#input');
+const outputEl = $('#output');
+const statsEl = $('#stats');
+const whyEl = $('#why');
+
+function statHtml(text){
+  const hasJamo = NFD_JAMO.test(text);
+  const hasSyl = HANGUL_SYL.test(text);
+  return `
+    <div>길이</div><div>${text.length.toLocaleString()}</div>
+    <div>자모 포함</div><div>${hasJamo ? '예' : '아니오'}</div>
+    <div>조합형 포함</div><div>${hasSyl ? '예' : '아니오'}</div>
+  `;
+}
+
+function render(){
+  const src = inputEl.value;
+  const {out, reason} = safeConvert(src);
+  outputEl.textContent = out;
+  statsEl.innerHTML = `<div>입력</div><div></div>` + statHtml(src) + `<div>출력</div><div></div>` + statHtml(out);
+  whyEl.textContent = '선택된 경로: ' + reason;
+}
+
+document.getElementById('btn-paste').addEventListener('click', async ()=>{
+  try{ const t = await navigator.clipboard.readText(); inputEl.value = t; render(); }
+  catch{ alert('클립보드 접근 불가'); }
+});
+document.getElementById('btn-clear').addEventListener('click', ()=>{ inputEl.value=''; render(); });
+document.getElementById('btn-copy').addEventListener('click', async ()=>{
+  const t = outputEl.textContent || '';
+  if(!t.trim()){ alert('복사할 결과가 없습니다.'); return; }
+  try{ await navigator.clipboard.writeText(t); alert('복사 완료 ✅'); }
+  catch{ alert('복사 실패 ❌'); }
+});
+document.getElementById('btn-select').addEventListener('click', ()=>{
+  const sel = window.getSelection();
+  const range = document.createRange();
+  range.selectNodeContents(outputEl);
+  sel.removeAllRanges(); sel.addRange(range);
+});
+
+inputEl.addEventListener('input', render);
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mac Hangul Online Tool — NFC/NFD · Clipboard · Inspector</title>
+<style>
+  :root{
+    --bg:#0c0f18; --fg:#e9edf6; --muted:#a2abc2; --card:#12172a; --line:#1e2744; --accent:#5fb3ff;
+    --good:#2ec27e; --warn:#ffb86c; --bad:#ff6b6b;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Apple SD Gothic Neo,Noto Sans KR,sans-serif;line-height:1.55}
+  header{padding:22px 14px;text-align:center;border-bottom:1px solid var(--line)}
+  header h1{margin:0;font-size:22px}
+  header .sub{color:var(--muted);font-size:13px;margin-top:6px}
+  main{max-width:1100px;margin:0 auto;padding:18px;display:grid;gap:16px}
+  .grid{display:grid;grid-template-columns:1fr;gap:16px}
+  @media(min-width:980px){ .grid{grid-template-columns:1fr 1fr} }
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px}
+  .card h2{margin:0 0 8px 0;font-size:16px;color:var(--muted);font-weight:600}
+  textarea,.mono{width:100%;min-height:220px;background:#0c1224;border:1px solid #2a355a;border-radius:12px;color:var(--fg);
+                 padding:12px;font-size:15px;resize:vertical;line-height:1.6}
+  .mono{white-space:pre-wrap;overflow:auto}
+  .bar{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  button{background:#22335c;border:1px solid #2c4173;color:#e6ecff;border-radius:10px;padding:8px 12px;cursor:pointer;font-size:14px}
+  button:hover{background:#2b3f70}
+  .accent{background:var(--accent);border-color:var(--accent);color:#0b1020}
+  .switch{display:inline-flex;align-items:center;gap:6px;margin-right:10px}
+  .switch input{accent-color:var(--accent)}
+  .hint{font-size:12.5px;color:var(--muted);margin-top:8px}
+  .pill{display:inline-block;background:#1b2547;border:1px solid #2b3c6f;color:#bcd3ff;border-radius:999px;padding:3px 8px;margin-left:6px;font-size:12px}
+  .badge{display:inline-block;border-radius:8px;padding:2px 8px;font-size:12px;border:1px solid #33406a;background:#151d36}
+  .ok{color:var(--good)} .warn{color:var(--warn)} .bad{color:var(--bad)}
+  .kv{display:grid;grid-template-columns:max-content 1fr;gap:8px 14px;font-size:13px}
+  .kv div:nth-child(odd){color:var(--muted)}
+  .drop{border:2px dashed #2c3a67;border-radius:12px;padding:10px;text-align:center;margin-top:10px;color:#b8c5f2}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .small{font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Mac Hangul Online Tool <span class="pill">NFC/NFD</span> <span class="pill">Clipboard</span> <span class="pill">Inspector</span></h1>
+  <div class="sub">맥 분해형(NFD) 텍스트를 조합형(NFC)으로 자동 복원 · 화면에서 복사 · 클립보드 복사 · 코드포인트 분석</div>
+</header>
+
+<main>
+  <section class="grid">
+    <div class="card">
+      <h2>입력</h2>
+      <textarea id="input" placeholder="여기에 맥에서 복사한 텍스트(NFD/깨짐 포함)를 붙여넣으세요."></textarea>
+      <div class="bar">
+        <button id="btn-paste">붙여넣기</button>
+        <button id="btn-clear">지우기</button>
+        <button id="btn-swap">입력 ↔ 출력 교환</button>
+      </div>
+      <div class="drop" id="drop">여기로 .txt 파일을 드래그&드롭하거나 선택하여 불러오기<input type="file" id="file" accept=".txt" style="display:block;margin:8px auto 0"></div>
+      <div class="hint">변경 시 우측 결과가 자동으로 갱신됩니다.</div>
+    </div>
+
+    <div class="card">
+      <h2>결과</h2>
+      <div class="two">
+        <div>
+          <div class="badge">표시용</div>
+          <div id="output" class="mono" aria-label="변환 결과"></div>
+          <div class="bar">
+            <button class="accent" id="btn-copy">📋 결과 복사</button>
+            <button id="btn-select">전체 선택</button>
+            <button id="btn-download">.txt 다운로드</button>
+          </div>
+        </div>
+        <div>
+          <div class="badge">선택 변환 복사</div>
+          <div class="bar">
+            <button id="btn-copy-nfc">NFC로 복사</button>
+            <button id="btn-copy-nfd">NFD로 복사</button>
+            <button id="btn-copy-raw">원본 그대로 복사</button>
+          </div>
+          <div class="hint small">※ 화면 표시와 별개로, 원하는 정규화 형태로 직접 복사할 수 있습니다.</div>
+        </div>
+      </div>
+      <div class="hint">복원 로직: NFC 정규화 + URL 디코딩 + Latin1→UTF‑8 재해석 + 수동 보정(휴리스틱)</div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>설정 · 고급</h2>
+    <div class="bar">
+      <label class="switch"><input type="checkbox" id="opt-nfc" checked> <span>NFC 정규화</span></label>
+      <label class="switch"><input type="checkbox" id="opt-url" checked> <span>URL 디코딩</span></label>
+      <label class="switch"><input type="checkbox" id="opt-latin1" checked> <span>Latin1→UTF‑8 재해석</span></label>
+      <label class="switch"><input type="checkbox" id="opt-manual" checked> <span>수동 보정</span></label>
+      <button id="btn-try-all">모든 방식 점수 비교</button>
+      <button id="btn-original">원본 표시</button>
+    </div>
+    <div class="kv" id="stats"></div>
+  </section>
+
+  <section class="card">
+    <h2>코드포인트 인스펙터</h2>
+    <div class="two">
+      <div>
+        <div class="badge">원본</div>
+        <div id="ins-src" class="mono" style="min-height:140px"></div>
+      </div>
+      <div>
+        <div class="badge">결과</div>
+        <div id="ins-out" class="mono" style="min-height:140px"></div>
+      </div>
+    </div>
+    <div class="hint small">각 문자에 대해 U+코드 · 이름을 표시합니다(ASCII/한글 구분).</div>
+  </section>
+
+  <div class="hint">※ 모든 처리는 브라우저 내에서만 수행됩니다. (네트워크 전송 없음)</div>
+</main>
+
+<script>
+// ---------- Helpers ----------
+const $ = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
+
+function isNFD(s){
+  try{ return s !== s.normalize('NFC'); }catch(e){ return false; }
+}
+function hangulCount(s){
+  const m = s.match(/[\\u1100-\\u11FF\\u3130-\\u318F\\uAC00-\\uD7A3]/g);
+  return m ? m.length : 0;
+}
+function toLatin1Bytes(str){
+  const bytes = new Uint8Array(str.length);
+  for(let i=0;i<str.length;i++){ bytes[i] = str.charCodeAt(i) & 0xFF; }
+  return bytes;
+}
+function latin1ToUtf8(str){
+  try{
+    const bytes = toLatin1Bytes(str);
+    return new TextDecoder('utf-8',{fatal:false}).decode(bytes);
+  }catch(e){ return str; }
+}
+function urlDecode(str){
+  try{ return decodeURIComponent(str.replace(/\\+/g,'%20')); }
+  catch(e){
+    return str.replace(/%[0-9A-Fa-f]{2}/g, m=>{ try{return decodeURIComponent(m);}catch{ return m; } });
+  }
+}
+const manualPairs = [
+  ['Ã„','Ä'], ['Ã–','Ö'], ['Ãœ','Ü'], ['Ã§','ç'], ['Ã±','ñ'],
+  ['Ã¡','á'], ['Ã©','é'], ['Ã³','ó'], ['Ã¨','è'], ['Ãµ','õ'],
+  ['Ã«','ë'], ['Ã¬','ì'], ['Ã­','í'], ['Ãª','ê'], ['Ã©','é']
+];
+function manualFix(s){
+  let t = s;
+  for(const [a,b] of manualPairs){ t = t.split(a).join(b); }
+  return latin1ToUtf8(t);
+}
+
+function pipeline(src, opts){
+  let out = src;
+  if(opts.url) out = urlDecode(out);
+  if(opts.latin1) out = latin1ToUtf8(out);
+  if(opts.manual) out = manualFix(out);
+  if(opts.nfc) out = out.normalize('NFC');
+  return out;
+}
+
+function score(s){
+  const h = hangulCount(s);
+  const bad = (s.match(/\\uFFFD/g)||[]).length;
+  const len = s.trim().length;
+  return h*10 - bad*2 + Math.min(len, 50)/50;
+}
+
+function bestOfAll(src){
+  const variants = [];
+  const combos = [
+    {nfc:true, url:true, latin1:true, manual:true, label:'모두 적용'},
+    {nfc:true, url:false, latin1:true, manual:true, label:'URL 제외'},
+    {nfc:true, url:true, latin1:false, manual:true, label:'Latin1 제외'},
+    {nfc:true, url:true, latin1:true, manual:false, label:'수동 제외'},
+    {nfc:true, url:false, latin1:false, manual:false, label:'NFC만'},
+    {nfc:false, url:true, latin1:true, manual:true, label:'정규화 제외'},
+  ];
+  for(const c of combos){
+    const text = pipeline(src, c);
+    variants.push({label:c.label, text, score:score(text)});
+  }
+  variants.sort((a,b)=>b.score-a.score);
+  return variants;
+}
+
+function codepointInfo(s){
+  const arr = [];
+  for(const ch of s){
+    const cp = ch.codePointAt(0).toString(16).toUpperCase().padStart(4,'0');
+    const isHangul = /[\\uAC00-\\uD7AF]/.test(ch) || /[\\u1100-\\u11FF]/.test(ch) || /[\\u3130-\\u318F]/.test(ch);
+    arr.push(`${ch === '\\n' ? '⏎' : ch}  —  U+${cp}${isHangul ? ' (Hangul)' : ''}`);
+  }
+  return arr.join('\\n');
+}
+
+// ---------- Elements ----------
+const inputEl = $('#input');
+const outputEl = $('#output');
+const statsEl  = $('#stats');
+const insSrcEl = $('#ins-src');
+const insOutEl = $('#ins-out');
+
+const optNFC = $('#opt-nfc');
+const optURL = $('#opt-url');
+const optLAT = $('#opt-latin1');
+const optMAN = $('#opt-manual');
+
+// ---------- Render ----------
+function render(){
+  const src = inputEl.value;
+  const opts = { nfc:optNFC.checked, url:optURL.checked, latin1:optLAT.checked, manual:optMAN.checked };
+  const out = pipeline(src, opts);
+  outputEl.textContent = out; // 화면 표시(안전)
+  // Stats
+  const sNFD = isNFD(src);
+  const oNFD = isNFD(out);
+  statsEl.innerHTML = `
+    <div>입력 길이</div><div>${src.length.toLocaleString()}</div>
+    <div>입력 한글 수</div><div>${hangulCount(src).toLocaleString()}</div>
+    <div>입력 정규화</div><div>${sNFD ? '<span class="warn">NFD(분해형)</span>' : '<span class="ok">NFC(조합형)</span>'}</div>
+    <div>출력 길이</div><div>${out.length.toLocaleString()}</div>
+    <div>출력 한글 수</div><div>${hangulCount(out).toLocaleString()}</div>
+    <div>출력 정규화</div><div>${oNFD ? '<span class="warn">NFD(분해형)</span>' : '<span class="ok">NFC(조합형)</span>'}</div>
+  `;
+  // Inspectors
+  insSrcEl.textContent = codepointInfo(src);
+  insOutEl.textContent = codepointInfo(out);
+}
+
+// ---------- Actions ----------
+$('#btn-paste').addEventListener('click', async () => {
+  try{
+    const txt = await navigator.clipboard.readText();
+    inputEl.value = txt;
+    render();
+  }catch{
+    alert('클립보드 접근이 차단되었습니다. 브라우저 권한을 확인하세요.');
+  }
+});
+$('#btn-clear').addEventListener('click', ()=>{ inputEl.value=''; render(); });
+$('#btn-swap').addEventListener('click', ()=>{
+  const tmp = inputEl.value;
+  inputEl.value = outputEl.textContent || '';
+  outputEl.textContent = tmp;
+  render();
+});
+$('#btn-copy').addEventListener('click', async ()=>{
+  const text = outputEl.textContent || '';
+  if(!text.trim()){ alert('복사할 결과가 없습니다.'); return; }
+  try{
+    await navigator.clipboard.writeText(text);
+    alert('결과 복사 완료 ✅');
+  }catch{
+    // fallback
+    const sel = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(outputEl);
+    sel.removeAllRanges(); sel.addRange(range);
+    const ok = document.execCommand('copy');
+    sel.removeAllRanges();
+    alert(ok ? '복사 완료 ✅' : '복사 실패 ❌');
+  }
+});
+$('#btn-select').addEventListener('click', ()=>{
+  const sel = window.getSelection();
+  const range = document.createRange();
+  range.selectNodeContents(outputEl);
+  sel.removeAllRanges(); sel.addRange(range);
+});
+$('#btn-download').addEventListener('click', ()=>{
+  const blob = new Blob([outputEl.textContent||''], {type:'text/plain;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download='converted_ko.txt'; a.click();
+  URL.revokeObjectURL(url);
+});
+
+$('#btn-copy-nfc').addEventListener('click', async ()=>{
+  const text = (outputEl.textContent||'').normalize('NFC');
+  if(!text){ alert('복사할 결과가 없습니다.'); return; }
+  await navigator.clipboard.writeText(text).then(()=>alert('NFC로 복사 완료 ✅')).catch(()=>alert('복사 실패 ❌'));
+});
+$('#btn-copy-nfd').addEventListener('click', async ()=>{
+  const text = (outputEl.textContent||'').normalize('NFD');
+  if(!text){ alert('복사할 결과가 없습니다.'); return; }
+  await navigator.clipboard.writeText(text).then(()=>alert('NFD로 복사 완료 ✅')).catch(()=>alert('복사 실패 ❌'));
+});
+$('#btn-copy-raw').addEventListener('click', async ()=>{
+  const text = inputEl.value || '';
+  if(!text){ alert('복사할 원본이 없습니다.'); return; }
+  await navigator.clipboard.writeText(text).then(()=>alert('원본 그대로 복사 완료 ✅')).catch(()=>alert('복사 실패 ❌'));
+});
+
+$('#btn-original').addEventListener('click', ()=>{
+  outputEl.textContent = inputEl.value;
+  render(); // stats/inspector 갱신
+});
+$('#btn-try-all').addEventListener('click', ()=>{
+  const src = inputEl.value;
+  const arr = bestOfAll(src);
+  const msg = arr.map(x=>`• ${x.label} — 점수 ${x.score.toFixed(2)} / 한글 ${hangulCount(x.text)}`).join('\\n');
+  alert('모든 방식 비교\\n\\n'+msg+'\\n\\n※ 현재 화면에는 설정 스위치에 따른 결과가 표시됩니다.');
+});
+
+// File input & drop
+const fileInput = $('#file');
+const drop = $('#drop');
+fileInput.addEventListener('change', async (e)=>{
+  const f = e.target.files[0]; if(!f) return;
+  const txt = await f.text();
+  inputEl.value = txt; render();
+});
+['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev, e=>{ e.preventDefault(); drop.style.background='#0f1630'; }));
+['dragleave','drop'].forEach(ev=>drop.addEventListener(ev, e=>{ e.preventDefault(); drop.style.background=''; }));
+drop.addEventListener('drop', async (e)=>{
+  const f = e.dataTransfer.files[0]; if(!f) return;
+  const txt = await f.text();
+  inputEl.value = txt; render();
+});
+
+// Options
+[optNFC,optURL,optLAT,optMAN].forEach(el=>el.addEventListener('change', render));
+
+// Input live
+$('#input').addEventListener('input', render);
+
+// First render
+render();
+</script>
+</body>
+</html>

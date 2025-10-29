@@ -1,0 +1,222 @@
+
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>맥 한글 변환 도구 · Mac Hangul Conversion Tool (v2)</title>
+<meta name="description" content="맥(NFD)에서 온 한글을 NFC로 안전 변환. URL/Latin1 깨짐 자동 보정, 클립보드 복사, 파일 드래그&드롭/선택, 오프라인 PWA.">
+<link rel="manifest" href="manifest.webmanifest">
+<style>
+  :root{ --bg:#0c0f18; --fg:#e9edf6; --muted:#a2abc2; --card:#12172a; --line:#1e2744; --accent:#5fb3ff;
+         --btn:#22335c; --btnb:#2c4173; --btnh:#2b3f70; }
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Apple SD Gothic Neo,Noto Sans KR,sans-serif}
+  header{padding:16px 14px;border-bottom:1px solid var(--line)}
+  header .row{max-width:1120px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;gap:12px}
+  main{max-width:1120px;margin:0 auto;padding:18px;display:grid;gap:16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px}
+  h2{margin:0 0 8px 0;color:var(--muted);font-size:16px}
+  textarea,.mono{width:100%;min-height:220px;background:#0c1224;border:1px solid #2a355a;border-radius:12px;color:var(--fg);
+                 padding:12px;font-size:15px;line-height:1.6;resize:vertical}
+  .mono{white-space:pre-wrap;overflow:auto}
+  .bar{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  button{background:var(--btn);border:1px solid var(--btnb);color:var(--fg);border-radius:12px;padding:10px 14px;cursor:pointer;font-size:15px}
+  button:hover{background:var(--btnh)}
+  .accent{background:var(--accent);border-color:var(--accent);color:#0b1020}
+  .grid{display:grid;grid-template-columns:1fr;gap:16px}
+  @media(min-width:1000px){ .grid{grid-template-columns:1fr 1fr} }
+  .drop{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+        border:2px dashed var(--line);border-radius:12px;padding:14px;text-align:center;color:var(--muted);margin-top:10px}
+  .drop.hover{background:#0f1630}
+  .hint{font-size:12.5px;color:var(--muted);margin-top:8px}
+  /* Mobile large buttons */
+  @media(max-width:640px){ button{width:100%;padding:14px 16px;font-size:16px;border-radius:14px} }
+</style>
+</head>
+<body>
+<header>
+  <div class="row">
+    <strong>맥 한글 변환 도구 · Mac Hangul Conversion Tool (v2)</strong>
+    <div>
+      <button id="theme">🌙</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="grid">
+    <div class="card">
+      <h2>입력</h2>
+      <textarea id="input" placeholder="여기에 맥에서 복사한 텍스트(NFD/깨짐 포함)를 붙여넣으세요."></textarea>
+      <div class="bar">
+        <button id="btn-paste">붙여넣기</button>
+        <button id="btn-clear">지우기</button>
+        <button id="btn-swap">입력 ↔ 출력 교환</button>
+      </div>
+
+      <!-- Fixed drop/select area -->
+      <div id="dropzone" class="drop" aria-label="파일 드래그&드롭 영역">
+        <div>여기로 <b>.txt</b> 파일을 드래그&드롭하거나</div>
+        <div><button id="btn-file" class="accent">📁 파일 선택</button></div>
+        <input id="file" type="file" accept=".txt" hidden>
+      </div>
+
+      <div class="hint">변경 시 우측 결과가 자동으로 갱신됩니다.</div>
+    </div>
+
+    <div class="card">
+      <h2>결과</h2>
+      <div id="output" class="mono" aria-label="변환 결과"></div>
+      <div class="bar">
+        <button class="accent" id="btn-copy">📋 결과 복사</button>
+        <button id="btn-select">전체 선택</button>
+        <button id="btn-download">.txt 다운로드</button>
+      </div>
+      <div class="hint" id="why">경로: -</div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>코드포인트 인스펙터</h2>
+    <div class="grid">
+      <div>
+        <div class="mono" id="ins-src" style="min-height:120px"></div>
+      </div>
+      <div>
+        <div class="mono" id="ins-out" style="min-height:120px"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+
+// --- Safe conversion helpers (same as previous safe logic) ---
+const NFD_JAMO = /[\\u1100-\\u11FF\\u3130-\\u318F]/;
+const HANGUL_SYL = /[\\uAC00-\\uD7A3]/;
+const MOJIBAKE_SEQ = /Ã|Â|¤|�/;
+const PERCENT_ENC = /%[0-9A-Fa-f]{2}/;
+
+function looksPureNFD(s){ return NFD_JAMO.test(s) && !HANGUL_SYL.test(s); }
+function looksMojibakeLatin1(s){ return MOJIBAKE_SEQ.test(s); }
+function looksPercentEncoded(s){ return PERCENT_ENC.test(s); }
+
+function urlDecode(str){
+  try{ return decodeURIComponent(str.replace(/\\+/g,'%20')); }
+  catch(e){ return str.replace(/%[0-9A-Fa-f]{2}/g, m=>{ try{return decodeURIComponent(m);}catch{ return m; } }); }
+}
+function latin1ToUtf8(str){
+  try{
+    const bytes = new Uint8Array(str.length);
+    for(let i=0;i<str.length;i++){ bytes[i] = str.charCodeAt(i) & 0xFF; }
+    return new TextDecoder('utf-8',{fatal:false}).decode(bytes);
+  }catch(e){ return str; }
+}
+
+function safeConvert(src){
+  let reason = '';
+  let out = src;
+  if(looksPureNFD(src)){
+    out = src.normalize('NFC'); reason = 'NFD→NFC';
+  }else if(looksPercentEncoded(src)){
+    out = urlDecode(src); try{ out = out.normalize('NFC'); }catch{} reason = 'URL→NFC';
+  }else if(looksMojibakeLatin1(src)){
+    out = latin1ToUtf8(src); try{ out = out.normalize('NFC'); }catch{} reason = 'Latin1→UTF-8→NFC';
+  }else{
+    try{ out = src.normalize('NFC'); reason = 'NFC only'; }catch{ reason = 'original'; }
+  }
+  return {out, reason};
+}
+
+function hangulCount(s){ const m = s.match(/[\u1100-\u11FF\u3130-\u318F\uAC00-\uD7A3]/g); return m ? m.length : 0; }
+function codepointInfo(s){
+  const arr = [];
+  for(const ch of s){
+    const cp = ch.codePointAt(0).toString(16).toUpperCase().padStart(4,'0');
+    const isHangul = /[\\uAC00-\\uD7AF]/.test(ch) || /[\\u1100-\\u11FF]/.test(ch) || /[\\u3130-\\u318F]/.test(ch);
+    arr.push(`${ch === '\\n' ? '⏎' : ch}  —  U+${cp}${isHangul ? ' (Hangul)' : ''}`);
+  }
+  return arr.join('\\n');
+}
+
+const inputEl = $('#input');
+const outputEl = $('#output');
+const insSrcEl = $('#ins-src');
+const insOutEl = $('#ins-out');
+const whyEl = $('#why');
+
+function render(){
+  const src = inputEl.value;
+  const {out, reason} = safeConvert(src);
+  outputEl.textContent = out;
+  insSrcEl.textContent = codepointInfo(src);
+  insOutEl.textContent = codepointInfo(out);
+  whyEl.textContent = '경로: ' + reason + ` | 한글수: ${hangulCount(out)}`;
+}
+
+$('#btn-paste').addEventListener('click', async ()=>{
+  try{ const t = await navigator.clipboard.readText(); inputEl.value = t; render(); }
+  catch{ alert('클립보드 접근 불가'); }
+});
+$('#btn-clear').addEventListener('click', ()=>{ inputEl.value=''; render(); });
+$('#btn-swap').addEventListener('click', ()=>{
+  const tmp = inputEl.value; inputEl.value = outputEl.textContent || ''; outputEl.textContent = tmp; render();
+});
+$('#btn-copy').addEventListener('click', async ()=>{
+  const t = outputEl.textContent || ''; if(!t.trim()){ alert('복사할 결과가 없습니다.'); return; }
+  try{ await navigator.clipboard.writeText(t); alert('복사 완료 ✅'); }catch{ alert('복사 실패 ❌'); }
+});
+$('#btn-select').addEventListener('click', ()=>{
+  const sel = window.getSelection(); const range = document.createRange();
+  range.selectNodeContents(outputEl); sel.removeAllRanges(); sel.addRange(range);
+});
+$('#btn-download').addEventListener('click', ()=>{
+  const blob = new Blob([outputEl.textContent||''], {type:'text/plain;charset=utf-8'});
+  const url = URL.createObjectURL(blob); const a = document.createElement('a');
+  a.href=url; a.download='converted_ko.txt'; a.click(); URL.revokeObjectURL(url);
+});
+
+// --- Fixed File Select & Drag&Drop ---
+const fileInput = $('#file');
+const btnFile = $('#btn-file');
+const dropzone = $('#dropzone');
+
+btnFile.addEventListener('click', ()=> fileInput.click());
+dropzone.addEventListener('click', (e)=>{
+  // 클릭으로도 파일 선택 열리게
+  if(e.target !== btnFile) fileInput.click();
+});
+
+fileInput.addEventListener('change', async (e)=>{
+  const f = e.target.files && e.target.files[0];
+  if(!f) return;
+  const txt = await f.text();
+  inputEl.value = txt; render();
+  fileInput.value = ''; // 같은 파일 재선택 허용
+});
+
+['dragenter','dragover'].forEach(ev => {
+  dropzone.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); dropzone.classList.add('hover'); });
+  window.addEventListener(ev, e => { e.preventDefault(); });
+});
+['dragleave','drop'].forEach(ev => {
+  dropzone.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); dropzone.classList.remove('hover'); });
+});
+window.addEventListener('drop', e => {
+  e.preventDefault();
+  const dt = e.dataTransfer;
+  const f = dt && dt.files && dt.files[0];
+  if(!f) return;
+  f.text().then(txt => { inputEl.value = txt; render(); });
+});
+
+// Theme (very simple)
+document.getElementById('theme').addEventListener('click', ()=> document.body.classList.toggle('light'));
+
+// Live
+inputEl.addEventListener('input', render);
+render();
+</script>
+</body>
+</html>
