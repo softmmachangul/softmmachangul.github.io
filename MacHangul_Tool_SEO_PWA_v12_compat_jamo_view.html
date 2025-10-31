@@ -374,9 +374,62 @@ let deferredPrompt; window.addEventListener('beforeinstallprompt', (e)=>{ e.prev
 document.getElementById('install').addEventListener('click', async ()=>{ if(!deferredPrompt) return; deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt=null; document.getElementById('install').style.display='none'; });
 if('serviceWorker' in navigator){ window.addEventListener('load', ()=> navigator.serviceWorker.register('service-worker.js')); }
 
-let adfitLoaded=false; function loadAdfit(){ if(adfitLoaded) return; adfitLoaded=true; const s=document.createElement('script'); s.async=true; s.type='text/javascript'; s.src='//t1.daumcdn.net/kas/static/ba.min.js'; document.body.appendChild(s); }
+function detachAdfitWatchers(){
+  window.removeEventListener('scroll', handleAdfitViewportChange);
+  window.removeEventListener('resize', handleAdfitViewportChange);
+}
+let adfitLoaded=false;
+function loadAdfit(){
+  if(adfitLoaded) return;
+  adfitLoaded=true;
+  const s=document.createElement('script');
+  s.async=true;
+  s.type='text/javascript';
+  s.src='https://t1.daumcdn.net/kas/static/ba.min.js';
+  document.body.appendChild(s);
+  window.kakaoAdFit = window.kakaoAdFit || [];
+  window.kakaoAdFit.push({});
+  detachAdfitWatchers();
+}
 const adSlots=[document.getElementById('adfit-top'),document.getElementById('adfit-mid'),document.getElementById('adfit-bottom')].filter(Boolean);
-if('IntersectionObserver' in window && adSlots.length){ const io=new IntersectionObserver((entries)=>{ if(entries.some(e=>e.isIntersecting)) { loadAdfit(); io.disconnect(); } },{threshold:0.01}); adSlots.forEach(el=>io.observe(el)); } else { setTimeout(loadAdfit,1500); }
+function adSlotVisible(el){
+  const rect=el.getBoundingClientRect();
+  const viewHeight=window.innerHeight || document.documentElement.clientHeight || 0;
+  return rect.bottom > 0 && rect.top < viewHeight;
+}
+function ensureAdfit(){
+  if(adfitLoaded) return true;
+  if(adSlots.some(adSlotVisible)){
+    loadAdfit();
+    return true;
+  }
+  return false;
+}
+function handleAdfitViewportChange(){
+  ensureAdfit();
+}
+if(!adSlots.length){
+  loadAdfit();
+} else if(!ensureAdfit()){
+  if('IntersectionObserver' in window){
+    const io=new IntersectionObserver((entries)=>{
+      if(entries.some(e=>e.isIntersecting)){
+        loadAdfit();
+        io.disconnect();
+      }
+    },{threshold:0.01,rootMargin:'120px'});
+    adSlots.forEach(el=>io.observe(el));
+  }
+  window.addEventListener('scroll', handleAdfitViewportChange, {passive:true});
+  window.addEventListener('resize', handleAdfitViewportChange);
+  window.addEventListener('load', ()=> setTimeout(loadAdfit, 1200), {once:true});
+  setTimeout(()=>{
+    if(!ensureAdfit()){
+      loadAdfit();
+      ensureAdfit();
+    }
+  },4000);
+}
 
 // ---- Initial render ----
 render();
