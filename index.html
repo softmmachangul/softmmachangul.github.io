@@ -374,24 +374,43 @@ let deferredPrompt; window.addEventListener('beforeinstallprompt', (e)=>{ e.prev
 document.getElementById('install').addEventListener('click', async ()=>{ if(!deferredPrompt) return; deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt=null; document.getElementById('install').style.display='none'; });
 if('serviceWorker' in navigator){ window.addEventListener('load', ()=> navigator.serviceWorker.register('service-worker.js')); }
 
+const adSlots=[document.getElementById('adfit-top'),document.getElementById('adfit-mid'),document.getElementById('adfit-bottom')].filter(Boolean);
 function detachAdfitWatchers(){
   window.removeEventListener('scroll', handleAdfitViewportChange);
   window.removeEventListener('resize', handleAdfitViewportChange);
 }
 let adfitLoaded=false;
+function requestAdfitRender(){
+  if(!adSlots.length) return true;
+  const adfit=window.kakaoAdFit;
+  if(!adfit || typeof adfit.push!=='function') return false;
+  adSlots.forEach(()=>adfit.push({}));
+  return true;
+}
 function loadAdfit(){
   if(adfitLoaded) return;
+  if(requestAdfitRender()){
+    adfitLoaded=true;
+    detachAdfitWatchers();
+    return;
+  }
   adfitLoaded=true;
   const s=document.createElement('script');
   s.async=true;
   s.type='text/javascript';
   s.src='https://t1.daumcdn.net/kas/static/ba.min.js';
-  document.body.appendChild(s);
-  window.kakaoAdFit = window.kakaoAdFit || [];
-  window.kakaoAdFit.push({});
-  detachAdfitWatchers();
+  s.addEventListener('load',()=>{
+    if(requestAdfitRender()){
+      detachAdfitWatchers();
+    }else{
+      adfitLoaded=false;
+    }
+  },{once:true});
+  s.addEventListener('error',()=>{
+    adfitLoaded=false;
+  },{once:true});
+  (document.head||document.body||document.documentElement).appendChild(s);
 }
-const adSlots=[document.getElementById('adfit-top'),document.getElementById('adfit-mid'),document.getElementById('adfit-bottom')].filter(Boolean);
 function adSlotVisible(el){
   const rect=el.getBoundingClientRect();
   const viewHeight=window.innerHeight || document.documentElement.clientHeight || 0;
